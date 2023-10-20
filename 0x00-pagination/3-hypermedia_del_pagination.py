@@ -1,14 +1,11 @@
 #!/usr/bin/env python3
-
 """
-This module contains the simple pagination class
-And the helper functions to practice cursor based
-API pagination
+Deletion-resilient hypermedia pagination
 """
 
 import csv
 import math
-from typing import List, Tuple
+from typing import Dict, List
 
 
 class Server:
@@ -17,51 +14,51 @@ class Server:
     DATA_FILE = "Popular_Baby_Names.csv"
 
     def __init__(self):
-        """
-        The constructor
-        """
         self.__dataset = None
+        self.__indexed_dataset = None
 
     def dataset(self) -> List[List]:
-        """
-        Cached dataset
+        """Cached dataset
         """
         if self.__dataset is None:
-            with open(self.DATA_FILE, "r", encoding="utf-8") as f:
+            with open(self.DATA_FILE) as f:
                 reader = csv.reader(f)
                 dataset = [row for row in reader]
             self.__dataset = dataset[1:]
 
         return self.__dataset
 
-    @staticmethod
-    def index_range(page: int, page_size: int) -> Tuple[int, int]:
+    def indexed_dataset(self) -> Dict[int, List]:
+        """Dataset indexed by sorting position, starting at 0
         """
-        The Actuall helper function
+        if self.__indexed_dataset is None:
+            dataset = self.dataset()
+            truncated_dataset = dataset[:1000]
+            self.__indexed_dataset = {
+                i: dataset[i] for i in range(len(dataset))
+            }
+        return self.__indexed_dataset
+
+    def get_hyper_index(self, index: int = None, page_size: int = 10) -> Dict:
+        """
+        The goal here is that if between two queries,
+        certain rows are removed from the dataset, the user
+        does not miss items from dataset when changing page.
         Args:
-            page (int):
-            page_size (int):
+            index (int): start index of the current page
+            page_size (int): size of items required in current page
         Returns:
-            Returns an tupple of ints
+            Dict[int, int|List[List]|None]: a dict of the following:
+                * index, next_index, page_size, data
         """
-        if isinstance(page, int) and isinstance(page_size, int):
-            return ((page - 1) * page_size, page_size * page)
-        raise TypeError('Expected `page` and `page_size` to be ints')
-
-    def get_page(self, page: int = 1, page_size: int = 10) -> List[List]:
-        """
-        Get paginated data
-        Args:
-            page (int)
-            page_size (int)
-        """
-        assert isinstance(page, int) and page > 0
-        assert isinstance(page_size, int) and page_size > 0
-
-        data = self.dataset()
-
-        try:
-            (start, end) = index_range(page, page_size)
-            return data[start:end]
-        except IndexError:
-            return []
+        focus = []
+        dataset = self.indexed_dataset()
+        index = 0 if index is None else index
+        keys = sorted(dataset.keys())
+        assert index >= 0 and index <= keys[-1]
+        [focus.append(i)
+         for i in keys if i >= index and len(focus) <= page_size]
+        data = [dataset[v] for v in focus[:-1]]
+        next_index = focus[-1] if len(focus) - page_size == 1 else None
+        return {'index': index, 'data': data,
+                'page_size': len(data), 'next_index': next_index}
