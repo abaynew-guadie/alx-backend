@@ -1,55 +1,54 @@
-#!/usr/bin/env python3
+#!/usr/bin/python3
+"""LFU Cache Replacement Implementation Class
 """
-This module illustrates how to do simple caching
-in python. This time, we will do FIFO caching.
-If the cache is at maximum capacity, we will discard
-the first item in and add the new one (FIFO)
-"""
+from threading import RLock
 
-from collections import OrderedDict
-BaseCaching = __import__("base_caching").BaseCaching
+BaseCaching = __import__('base_caching').BaseCaching
 
 
 class LFUCache(BaseCaching):
     """
-    A prety basic caching  system implementation
-    Based on a FIFO list
-    """
+    An implementaion of LFUCache(Least frequently used)
 
+    Attributes:
+        __stats (list): A dictionary of cache keys for access count
+        __rlock (RLock): Lock accessed resources to prevent race condition
+    """
     def __init__(self):
-        """
-        The constructor
+        """ Instantiation method, sets instance attributes
         """
         super().__init__()
-        self.cache_data = OrderedDict(self.cache_data)
+        self.__stats = {}
+        self.__rlock = RLock()
 
     def put(self, key, item):
+        """ Add an item in the cache
         """
-        Add an item to the cache
-        Args:
-            key (str): the key for the cache
-            item (str): the value to se
-        Returns:
-            Returns None (explicitly)
-        """
-
-        if len(self.cache_data.keys()) >= super().MAX_ITEMS:
-            last_key = list(self.cache_data.keys())[0]
-            self.cache_data.pop(last_key)
-            print(f'DISCARD: {last_key}')
-        if key and item:
-            self.cache_data[key] = item
-            # self.cache_data.move_to_end(key, last=False)
+        if key is not None and item is not None:
+            keyOut = self._balance(key)
+            with self.__rlock:
+                self.cache_data.update({key: item})
+            if keyOut is not None:
+                print('DISCARD: {}'.format(keyOut))
 
     def get(self, key):
+        """ Get an item by key
         """
-        Let's get the cache item by the key
-        Args:
-            key (str): Key to the item
-        Returns:
-            if key in self.cached_items, return the
-            item, None otherwise
+        with self.__rlock:
+            value = self.cache_data.get(key, None)
+            if key in self.__stats:
+                self.__stats[key] += 1
+        return value
+
+    def _balance(self, keyIn):
+        """ Removes the earliest item from the cache at MAX size
         """
-        if key in self.cache_data.keys():
-            self.cache_data.move_to_end(key, last=True)
-        return self.cache_data.get(key)
+        keyOut = None
+        with self.__rlock:
+            if keyIn not in self.__stats:
+                if len(self.cache_data) == BaseCaching.MAX_ITEMS:
+                    keyOut = min(self.__stats, key=self.__stats.get)
+                    self.cache_data.pop(keyOut)
+                    self.__stats.pop(keyOut)
+            self.__stats[keyIn] = self.__stats.get(keyIn, 0) + 1
+        return keyOut
