@@ -8,7 +8,7 @@ class BaseCaching():
       - constants of your caching system
       - where your data are stored (in a dictionary)
     """
-    MAX_ITEMS = 5 5 5 5 5 
+    MAX_ITEMS = 5 
 
     def __init__(self):
         """ Initiliaze
